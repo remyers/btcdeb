@@ -167,7 +167,7 @@ bool static IsDefinedHashtypeSignature(const valtype &vchSig) {
     if (vchSig.size() == 0) {
         return false;
     }
-    unsigned char nHashType = vchSig[vchSig.size() - 1] & (~(SIGHASH_ANYONECANPAY));
+    unsigned char nHashType = vchSig[vchSig.size() - 1] & (~(SIGHASH_ANYONECANPAY | SIGHASH_NOINPUT));
     if (nHashType < SIGHASH_ALL || nHashType > SIGHASH_SINGLE)
         return false;
 
@@ -1277,23 +1277,30 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
     btc_sign_logf("SignatureHash(nIn=%d, nHashType=%02x, amount=%lld)\n", nIn, nHashType, amount);
     assert(nIn < txTo.vin.size());
 
-    if (sigversion == SigVersion::WITNESS_V0) {
+    if (sigversion == SigVersion::WITNESS_V0 || sigversion == SigVersion::WITNESS_V1) {
         btc_sign_logf("- sigversion == SIGVERSION_WITNESS_V0\n");
         uint256 hashPrevouts;
         uint256 hashSequence;
         uint256 hashOutputs;
+        COutPoint outpoint;
+        CScript script;
         const bool cacheready = cache && cache->ready;
+        const bool noinput = (sigversion == SigVersion::WITNESS_V1 && !!(nHashType & SIGHASH_NOINPUT));
 
-        if (!(nHashType & SIGHASH_ANYONECANPAY)) {
+        if (!(nHashType & SIGHASH_ANYONECANPAY) && !noinput) {
             hashPrevouts = cacheready ? cache->hashPrevouts : GetPrevoutHash(txTo);
             btc_sign_logf("  hashPrevouts = %s\n", hashPrevouts.ToString().c_str());
         }
 
-        if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+        if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE && !noinput) {
             hashSequence = cacheready ? cache->hashSequence : GetSequenceHash(txTo);
             btc_sign_logf("  hashSequence = %s\n", hashSequence.ToString().c_str());
         }
 
+        if (!noinput) {
+            outpoint = txTo.vin[nIn].prevout;
+            script = scriptCode;
+	    }
 
         if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
             hashOutputs = cacheready ? cache->hashOutputs : GetOutputsHash(txTo);
@@ -1319,9 +1326,9 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
         // The input being signed (replacing the scriptSig with scriptCode + amount)
         // The prevout may already be contained in hashPrevout, and the nSequence
         // may already be contain in hashSequence.
-        ss << txTo.vin[nIn].prevout;
-        btc_sign_logf(" << txTo.vin[nIn=%d].prevout = %s\n", nIn, txTo.vin[nIn].prevout.ToString().c_str());
-        ss << scriptCode;
+        ss << outpoint;
+        btc_sign_logf(" << txTo.vin[nIn=%d].prevout = %s\n", nIn, outpoint.ToString().c_str());
+        ss << script;
         btc_sign_logf(" << scriptCode\n");
         ss << amount;
         btc_sign_logf(" << amount = %" PRId64 "\n", amount);

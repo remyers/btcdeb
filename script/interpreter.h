@@ -24,6 +24,7 @@ enum
     SIGHASH_ALL = 1,
     SIGHASH_NONE = 2,
     SIGHASH_SINGLE = 3,
+    SIGHASH_NOINPUT = 0x40,
     SIGHASH_ANYONECANPAY = 0x80,
 };
 
@@ -132,6 +133,7 @@ enum class SigVersion
 {
     BASE = 0,
     WITNESS_V0 = 1,
+    WITNESS_V1 = 5
 };
 
 /** Signature hash sizes */
